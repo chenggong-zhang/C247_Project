@@ -25,6 +25,7 @@ class MarketEnv(gym.Env):
         4)config.use_data_aug
         '''
         self.config = config
+        self.id = 'MarketEnv'
         self._max_episode_steps = None
 
         self.action_space = spaces.Box(
