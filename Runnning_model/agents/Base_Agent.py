@@ -10,10 +10,16 @@ import time
 from nn_builder.pytorch.NN import NN
 # from tensorboardX import SummaryWriter
 from torch.optim import optimizer
+import csv
+
+TRAINING_EPISODES_PER_EVAL_EPISODE = 10
+
 
 class Base_Agent(object):
 
     def __init__(self, config):
+        self.model_weights_dir = None
+        self.eval_ep = False
         self.logger = self.setup_logger()
         self.debug_mode = config.debug_mode
         # if self.debug_mode: self.tensorboard = SummaryWriter()
@@ -47,7 +53,24 @@ class Base_Agent(object):
 
     def step(self):
         """Takes a step in the game. This method must be overriden by any agent"""
+        '''eval_ep denotes if we want to train or evaluate an agent'''
         raise ValueError("Step needs to be implemented by the agent")
+
+    def locally_save_policy(self):
+        """Saves the policy, we need to save policy every several episodes."""
+        raise ValueError("loacally_save_policy needs to be implemented by the agent")
+
+    def load_policy(self, episode_number):
+        """Saves the policy, we need to save policy every several episodes."""
+        raise ValueError("load_policy needs to be implemented by the agent")
+
+    def save_hyperparameters(self):
+        # open file for writing, "w" is writing
+        w = csv.writer(open(self.model_weights_dir+"/hyperparameters.csv", "w"))
+        # loop over dictionary keys and values
+        for key, val in self.hyperparameters.items():
+            # write every key and value to file
+            w.writerow([key, val])
 
     def get_environment_title(self):
         """Extracts name of environment from it"""
@@ -155,12 +178,18 @@ class Base_Agent(object):
     def reset_game(self):
         """Resets the game information so we are ready to play a new episode"""
         self.environment.seed(self.config.seed)
+        if self.environment.environment_name=="MarketEnv":
+            if self.eval_ep:
+                self.environment.eval()
+            else:
+                self.environment.train()
         self.state = self.environment.reset()
         self.next_state = None
         self.action = None
         self.reward = None
         self.done = False
         self.total_episode_score_so_far = 0
+        self.episode_position_value = []
         self.episode_states = []
         self.episode_rewards = []
         self.episode_actions = []
@@ -184,21 +213,33 @@ class Base_Agent(object):
         """Runs game to completion n times and then summarises results and saves model (if asked to)"""
         if num_episodes is None: num_episodes = self.config.num_episodes_to_run
         start = time.time()
+        self.save_hyperparameters()
         while self.episode_number < num_episodes:
+            # eval_ep is a bool variable. eval_ep==True means we should evaluate agent on the environment.val_data
+            # otherwise, we should train agent on environment.train_data
+            self.eval_ep = self.episode_number % TRAINING_EPISODES_PER_EVAL_EPISODE == 0
+            if self.config.save_model and self.eval_ep:
+                self.locally_save_policy()
+                print('-----------------------------------------------------------------------------------------------')
             self.reset_game()
             self.step()
-            if save_and_print_results: self.save_and_print_result()
+            if save_and_print_results and self.eval_ep:
+                self.save_and_print_result()
+                print('-----------------------------------------------------------------------------------------------')
         time_taken = time.time() - start
-        if show_whether_achieved_goal: self.show_whether_achieved_goal()
-        if self.config.save_model: self.locally_save_policy()
+        if show_whether_achieved_goal:
+            self.show_whether_achieved_goal()
         return self.game_full_episode_scores, self.rolling_results, time_taken
 
     def conduct_action(self, action):
         """Conducts an action in the environment"""
-        self.next_state, self.reward, self.done, _ = self.environment.step(action)
+        self.next_state, self.reward, self.done, info = self.environment.step(action)
         self.total_episode_score_so_far += self.reward
+        self.episode_actions.append(action)
+        self.episode_rewards.append(self.reward)
+        self.episode_next_states.append(self.environment.obs)
+        self.episode_position_value.append(info['position_value'])
         if self.hyperparameters["clip_rewards"]: self.reward =  max(min(self.reward, 1.0), -1.0)
-
 
     def save_and_print_result(self):
         """Saves and prints results of the game"""
@@ -222,7 +263,7 @@ class Base_Agent(object):
 
     def print_rolling_result(self):
         """Prints out the latest episode results"""
-        text = """"\r Episode {0}, Score: {3: .2f}, Max score seen: {4: .2f}, Rolling score: {1: .2f}, Max rolling score seen: {2: .2f}"""
+        text = """"\r Episode {0}, Score: {3: .2f}, Max score seen: {4: .2f}, Rolling score: {1: .2f}, Max rolling score seen: {2: .2f}\n"""
         sys.stdout.write(text.format(len(self.game_full_episode_scores), self.rolling_results[-1], self.max_rolling_score_seen,
                                      self.game_full_episode_scores[-1], self.max_episode_score_seen))
         sys.stdout.flush()
