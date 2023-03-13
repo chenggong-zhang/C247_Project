@@ -4,6 +4,8 @@ from gym import spaces
 import copy
 from talib import *
 import pandas as pd
+from datetime import datetime
+
 
 class EnvConfig(object):
     def __init__(self):
@@ -11,6 +13,7 @@ class EnvConfig(object):
         self.eval_data =None
         self.mode = None
         self.use_data_aug = None
+        self.min_and_max = None
 
 
 class MarketEnv(gym.Env):
@@ -27,12 +30,13 @@ class MarketEnv(gym.Env):
         self.config = config
         self.id = 'MarketEnv'
         self.reward_threshold = 0.0
-        self.trials = 100
+        self.trials = 10
+
         # self.max_episode_steps = self.reward_for_achieving_goal
         self.max_episode_steps = None
 
         self.action_space = spaces.Box(
-            low=0, high=1, shape=(2,),
+            low=0, high=1, shape=(1,),
             dtype=np.float32
         )
         self.observation_space = spaces.Box(
@@ -41,7 +45,8 @@ class MarketEnv(gym.Env):
             shape=(29,),
             dtype=np.float32
         )
-        min_and_max = np.load('environments/Market_Environments/min_and_max.npy', allow_pickle=True).item()
+        # min_and_max = np.load('../environments/Market_Environments/min_and_max.npy', allow_pickle=True).item()
+        min_and_max = config.min_and_max
 
         self.MAX_OBS = np.concatenate((
             10000*5*np.ones(1),
@@ -115,29 +120,47 @@ class MarketEnv(gym.Env):
 
 
         self.state_data = np.concatenate((log_return.reshape(-1, 1),
-                                           log_high.reshape(-1, 1),
-                                           log_low.reshape(-1, 1),
-                                           volume.reshape(-1, 1),
-                                           uniswap_feat), 1)[88:]
+                                          log_high.reshape(-1, 1),
+                                          log_low.reshape(-1, 1),
+                                          volume.reshape(-1, 1),
+                                          uniswap_feat), 1)[88:]
+
+        # self.state_data = np.concatenate((open.reshape(-1, 1),
+        #                                   high.reshape(-1, 1),
+        #                                   low.reshape(-1, 1),
+        #                                   close.reshape(-1, 1),
+        #                                   volume.reshape(-1,1),
+        #                                   uniswap_feat), 1)[88:]
+
         self.track_data = self.track_data[88:]
 
-        max = np.max(self.state_data, 0)
-        min = np.min(self.state_data, 0)
-        min_and_max = {'min_obs':min, 'max_obs':max}
-        np.save('environments/Market_Environments/min_and_max.npy', min_and_max)
+        # max = np.max(self.state_data, 0)
+        # min = np.min(self.state_data, 0)
+        # min_and_max = {'min_obs':min, 'max_obs':max}
+        # np.save('min_and_max.npy', min_and_max)
 
     def reset(self):
         if self.config.mode == 'train':
-            self.track_data = copy.deepcopy(self.config.train_data)
+            print('environment in train mode')
+            step = np.random.choice(self.config.train_data.shape[0]-4000)
+            self.tmp_data = self.config.train_data[step:step+4000]
+            self.track_data = copy.deepcopy(self.tmp_data)
+
             if self.config.use_data_aug:
-                lam = np.random.uniform(0, 0.99, self.config.train_data.shape[0])
-                for i in range(1, self.config.train_data.shape[0]):
-                    self.track_data[i, 1:] = (1 - lam[i]) * self.config.train_data[i, 1:] \
-                                             + lam[i] * self.config.train_data[i - 1, 1:]
+                lam = np.random.uniform(0, 0.99, self.tmp_data.shape[0])
+                for i in range(1, self.tmp_data.shape[0]):
+                    self.track_data[i, 1:] = (1 - lam[i]) * self.tmp_data[i, 1:] \
+                                             + lam[i] * self.track_data[i - 1, 1:]
         elif self.config.mode == 'eval':
+            print('environment in evaluate mode')
             self.track_data = copy.deepcopy(self.config.eval_data)
         else:
             raise ValueError("mode of MarketEnv can only be 'train' or 'eval'.")
+
+
+        print('episode start time:{}, episode end time:{}' .format(datetime.utcfromtimestamp(self.track_data[0,0]).strftime('%Y-%m-%d %H:%M:%S'),
+                                                 datetime.utcfromtimestamp(self.track_data[-1,0]).strftime('%Y-%m-%d %H:%M:%S'))
+              )
 
         self.generate_track()
 
@@ -155,9 +178,16 @@ class MarketEnv(gym.Env):
         return self.normalize_obs()
 
     def step(self, action):
+
+
+        # self.track_data
+        # [volume, open, high, low, close]
+
+        action = np.clip(action, 0, 1)
+
         contract_price = self.track_data[self.cur_step,5]
         value = self.obs[0] + self.obs[1] * contract_price
-        new_value = value*action
+        new_value = value*np.array([action[0], 1-action[0]])
         self.obs[0] = new_value[0]
         self.obs[1] = new_value[1]/contract_price
 
@@ -168,24 +198,27 @@ class MarketEnv(gym.Env):
 
         obs = self.normalize_obs()
         reward = 100*np.log(next_value / value)
-        done = self.cur_step>=self.track_data.shape[0]
-        info = {}
+        done = (self.cur_step+1)>=self.track_data.shape[0]
+        info = {'position_value':new_value}
 
         return obs, reward, done, info
 
 # if __name__== '__main__':
-
-#     df = pd.read_csv('environments/Market_Environments/Bitfinex_ETHUSD_1h.csv')
+#
+#     df = pd.read_csv('Bitfinex_ETHUSD_1h.csv')
 #     data = df.to_numpy()[:,[0,7,3,4,5,6]]
 #     data = np.array(data,dtype=np.float64)
 #     config =  EnvConfig()
 #     config.train_data = data[:int(0.8*data.shape[0])]
 #     config.eval_data = data[int(0.8*data.shape[0]):int(0.9*data.shape[0])]
+#     # config.eval_data = data[:int(data.shape[0])]
 #     config.use_data_aug = True
 #     config.mode = 'eval'
-
+#     config.min_and_max = np.load('min_and_max.npy', allow_pickle=True).item()
+#
+#
 #     env = MarketEnv(config)
 #     env.reset()
 #     action = np.array([0.4,0.6])
 #     obs, reward, done, info=env.step(action)
-#      # config.test_data = data[int(0.8*data.shape[0]):int(0.9*data.shape[0])]
+     # config.test_data = data[int(0.8*data.shape[0]):int(0.9*data.shape[0])]

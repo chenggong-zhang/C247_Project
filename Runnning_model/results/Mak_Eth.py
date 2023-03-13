@@ -6,11 +6,9 @@ import gym
 import numpy as np
 from gym import spaces
 import copy
+from datetime import datetime
 from talib import *
 import pandas as pd
-
-
-
 from agents.policy_gradient_agents.PPO import PPO
 from agents.actor_critic_agents.DDPG import DDPG
 from agents.actor_critic_agents.SAC import SAC
@@ -31,33 +29,47 @@ from utilities.data_structures.Config import Config
 from environments.Market_Environments.MakEnv import MarketEnv
 from environments.Market_Environments.MakEnv import EnvConfig
 
+
+#coding:utf-8
+
+import sys,os,re
+import time
+
+
 config = Config()
 config.seed = 1
-height = 15
-width = 15
-random_goal_place = False
-num_possible_states = (height * width) ** (1 + 1*random_goal_place)
-embedding_dimensions = [[num_possible_states, 20]]
+# height = 15
+# width = 15
+# random_goal_place = False
+# num_possible_states = (height * width) ** (1 + 1*random_goal_place)
+# embedding_dimensions = [[num_possible_states, 20]]
 
 
-df = pd.read_csv('environments/Market_Environments/Bitfinex_ETHUSD_1h.csv')
-data = df.to_numpy()[:,[0,7,3,4,5,6]]
-data = np.array(data,dtype=np.float64)
-Envconfig =  EnvConfig()
+df = pd.read_csv('../environments/Market_Environments/Bitfinex_ETHUSD_1h.csv')
+data = df.to_numpy()[:,[1,7,3,4,5,6]]
+data = np.flip(data,axis=0)
+for i in range(data.shape[0]):
+    data[i, 0] = time.mktime(time.strptime(data[i, 0], '%Y/%m/%d %H:%M'))
+
+data = (np.array(data,dtype=np.float64))
+Envconfig = EnvConfig()
 # 1)config.train_data
 # 2)config.eval_data
 # 3)config.mode
 # 4)config.use_data_aug
 Envconfig.train_data = data[:int(0.8*data.shape[0])]
+# Envconfig.eval_data = data[:int(0.8*data.shape[0])]
 Envconfig.eval_data = data[int(0.8*data.shape[0]):int(0.9*data.shape[0])]
 Envconfig.mode = 'train'
-Envconfig.use_data_aug = True
+Envconfig.use_data_aug = False
+Envconfig.min_and_max = np.load('../environments/Market_Environments/min_and_max.npy', allow_pickle=True).item()
+
 # Envconfig.test_data = data[int(0.8*data.shape[0]):int(0.9*data.shape[0])]
 
 env = MarketEnv(Envconfig)
-env.reset()
-action = np.array([0.4,0.6])
-obs, reward, done, info = env.step(action)
+# env.reset()
+# action = np.array([0.4,0.6])
+# obs, reward, done, info = env.step(action)
  
 config.environment = env
 
@@ -223,8 +235,10 @@ config.environment = env
 #     trainer.run_games_for_agents()
 
 config.num_episodes_to_run = 450
-config.file_to_save_data_results = None
-config.file_to_save_results_graph = None
+config.file_to_save_data_results = './numerical_results/DDPG.pkl'
+config.file_to_save_results_graph = './numerical_results/DDPG.png'
+config.dir_to_save_models = './numerical_results'
+
 config.show_solution_score = False
 config.visualise_individual_results = False
 config.visualise_overall_agent_results = True
@@ -233,7 +247,7 @@ config.runs_per_agent = 3
 config.use_GPU = False
 config.overwrite_existing_results_file = False
 config.randomise_random_seed = True
-config.save_model = False
+config.save_model = True
 
 
 config.hyperparameters = {
@@ -257,23 +271,23 @@ config.hyperparameters = {
 
     "Actor_Critic_Agents": {
             "Actor": {
-                "learning_rate": 0.003,
-                "linear_hidden_units": [20, 20],
-                "final_layer_activation": None,
+                "learning_rate": 0.0003,
+                "linear_hidden_units": [64, 64],
+                "final_layer_activation": "sigmoid",
                 "batch_norm": False,
                 "tau": 0.005,
-                "gradient_clipping_norm": 5,
+                "gradient_clipping_norm": 0.5,
                 "initialiser": "Xavier"
             },
 
             "Critic": {
-                "learning_rate": 0.02,
-                "linear_hidden_units": [20, 20],
+                "learning_rate": 0.0003,
+                "linear_hidden_units": [64, 64],
                 "final_layer_activation": None,
                 "batch_norm": False,
                 "buffer_size": 1000000,
                 "tau": 0.005,
-                "gradient_clipping_norm": 5,
+                "gradient_clipping_norm": 0.5,
                 "initialiser": "Xavier"
             },
 
@@ -283,8 +297,8 @@ config.hyperparameters = {
         "mu": 0.0,  # for O-H noise
         "theta": 0.15,  # for O-H noise
         "sigma": 0.25,  # for O-H noise
-        "action_noise_std": 0.2,  # for TD3
-        "action_noise_clipping_range": 0.5,  # for TD3
+        "action_noise_std": 0.1,  # for TD3
+        "action_noise_clipping_range": 0.2,  # for TD3
         "update_every_n_steps": 20,
         "learning_updates_per_learning_session": 10,
         "automatically_tune_entropy_hyperparameter": True,
@@ -298,6 +312,6 @@ config.hyperparameters = {
 }
 
 if __name__ == "__main__":
-    AGENTS = [TD3, DDPG, PPO]
+    AGENTS = [DDPG]
     trainer = Trainer(config, AGENTS)
     trainer.run_games_for_agents()

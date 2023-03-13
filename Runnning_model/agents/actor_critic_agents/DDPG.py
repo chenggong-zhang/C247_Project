@@ -4,6 +4,8 @@ from torch import optim
 from agents.Base_Agent import Base_Agent
 from utilities.data_structures.Replay_Buffer import Replay_Buffer
 from exploration_strategies.OU_Noise_Exploration import OU_Noise_Exploration
+from exploration_strategies.Gaussian_Exploration import Gaussian_Exploration
+import os
 
 class DDPG(Base_Agent):
     """A DDPG Agent"""
@@ -11,6 +13,9 @@ class DDPG(Base_Agent):
 
     def __init__(self, config):
         Base_Agent.__init__(self, config)
+        self.model_weights_dir = config.dir_to_save_models + '/' + self.agent_name
+        if not os.path.exists(self.model_weights_dir):
+            os.makedirs(self.model_weights_dir)
         self.hyperparameters = config.hyperparameters
         self.critic_local = self.create_NN(input_dim=self.state_size + self.action_size, output_dim=1, key_to_use="Critic")
         self.critic_target = self.create_NN(input_dim=self.state_size + self.action_size, output_dim=1, key_to_use="Critic")
@@ -26,7 +31,8 @@ class DDPG(Base_Agent):
 
         self.actor_optimizer = optim.Adam(self.actor_local.parameters(),
                                           lr=self.hyperparameters["Actor"]["learning_rate"], eps=1e-4)
-        self.exploration_strategy = OU_Noise_Exploration(self.config)
+        # self.exploration_strategy = OU_Noise_Exploration(self.config)
+        self.exploration_strategy = Gaussian_Exploration(self.config)
 
     def step(self):
         """Runs a step in the game"""
@@ -34,12 +40,17 @@ class DDPG(Base_Agent):
             # print("State ", self.state.shape)
             self.action = self.pick_action()
             self.conduct_action(self.action)
-            if self.time_for_critic_and_actor_to_learn():
+            # print(self.environment.cur_step)
+            if self.time_for_critic_and_actor_to_learn() and not self.eval_ep:
+                # agent is permitted to learn only when it is in training mode.
                 for _ in range(self.hyperparameters["learning_updates_per_learning_session"]):
                     states, actions, rewards, next_states, dones = self.sample_experiences()
                     self.critic_learn(states, actions, rewards, next_states, dones)
                     self.actor_learn(states)
-            self.save_experience()
+            if not self.eval_ep:
+                # agent can store transition only when it is in training mode
+                self.save_experience()
+
             self.state = self.next_state #this is to set the state for the next iteration
             self.global_step_number += 1
         self.episode_number += 1
@@ -54,7 +65,8 @@ class DDPG(Base_Agent):
         with torch.no_grad():
             action = self.actor_local(state).cpu().data.numpy()
         self.actor_local.train()
-        action = self.exploration_strategy.perturb_action_for_exploration_purposes({"action": action})
+        if not self.eval_ep:
+            action = self.exploration_strategy.perturb_action_for_exploration_purposes({"action": action})
         return action.squeeze(0)
 
     def critic_learn(self, states, actions, rewards, next_states, dones):
@@ -113,3 +125,26 @@ class DDPG(Base_Agent):
         actions_pred = self.actor_local(states)
         actor_loss = -self.critic_local(torch.cat((states, actions_pred), 1)).mean()
         return actor_loss
+
+    def locally_save_policy(self):
+        '''every agent needs to inherit this method to save policy'''
+        torch.save(self.actor_local.state_dict(),
+                   self.model_weights_dir + "/{}_actor_local".format(self.episode_number))
+        torch.save(self.actor_target.state_dict(),
+                   self.model_weights_dir + "/{}_actor_target".format(self.episode_number))
+        torch.save(self.critic_local.state_dict(),
+                   self.model_weights_dir + "/{}_critic_local".format(self.episode_number))
+        torch.save(self.critic_target.state_dict(),
+                   self.model_weights_dir + "/{}_critic_target".format(self.episode_number))
+
+    def load_policy(self, episode_number):
+        device = 'cpu'
+        self.actor_local.load_state_dict(torch.load(self.model_weights_dir+"/{}_actor_local".format(episode_number),
+                                                    map_location=device))
+        self.actor_target.load_state_dict(torch.load(self.model_weights_dir+"/{}_actor_target".format(episode_number),
+                                                    map_location=device))
+        self.critic_local.load_state_dict(torch.load(self.model_weights_dir+"/{}_critic_local".format(episode_number),
+                                                     map_location=device))
+        self.critic_target.load_state_dict(torch.load(self.model_weights_dir+"/{}_critic_target".format(episode_number),
+                                                      map_location=device))
+
