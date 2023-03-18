@@ -12,7 +12,7 @@ from nn_builder.pytorch.NN import NN
 from torch.optim import optimizer
 import csv
 
-TRAINING_EPISODES_PER_EVAL_EPISODE = 11
+TRAINING_EPISODES_PER_EVAL_EPISODE = 10
 
 
 class Base_Agent(object):

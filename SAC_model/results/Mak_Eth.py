@@ -65,15 +65,15 @@ env = MarketEnv(Envconfig)
 config.environment = env
 
 config.num_episodes_to_run = 201
-config.file_to_save_data_results = 'results/data_and_graphs/Mak_SAC_5.pkl'
-config.file_to_save_results_graph = 'results/data_and_graphs/Mak_SAC_5.png'
+config.file_to_save_data_results = 'results/data_and_graphs/Mak_SAC.pkl'
+config.file_to_save_results_graph = 'results/data_and_graphs/Mak_SAC.png'
 config.dir_to_save_models = './numerical_results'
 
 config.show_solution_score = False
 config.visualise_individual_results = False
 config.visualise_overall_agent_results = True
 config.standard_deviation_results = 1.0
-config.runs_per_agent = 1
+config.runs_per_agent = 5
 config.use_GPU = True
 config.overwrite_existing_results_file = True
 config.randomise_random_seed = True
