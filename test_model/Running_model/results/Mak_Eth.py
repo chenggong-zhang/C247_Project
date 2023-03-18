@@ -60,7 +60,7 @@ env = MarketEnv(Envconfig)
  
 config.environment = env
 
-config.num_episodes_to_run = 550
+config.num_episodes_to_run = 11
 config.file_to_save_data_results = './numerical_results/DDPG.pkl'
 config.file_to_save_results_graph = './numerical_results/DDPG.png'
 config.dir_to_save_models = './numerical_results'
@@ -69,7 +69,7 @@ config.show_solution_score = False
 config.visualise_individual_results = True
 config.visualise_overall_agent_results = True
 config.standard_deviation_results = 1.0
-config.runs_per_agent = 3
+config.runs_per_agent = 5
 config.use_GPU = True
 config.overwrite_existing_results_file = False
 config.randomise_random_seed = True
