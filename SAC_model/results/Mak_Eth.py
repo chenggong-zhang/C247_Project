@@ -127,8 +127,8 @@ config.hyperparameters = {
         "mu": 0.0,  # for O-H noise
         "theta": 0.15,  # for O-H noise
         "sigma": 0.25,  # for O-H noise
-        "action_noise_std": 0.1,  # for TD3
-        "action_noise_clipping_range": 0.2,  # for TD3
+        "action_noise_std": 0.1,  # for TD3_model
+        "action_noise_clipping_range": 0.2,  # for TD3_model
         "update_every_n_steps": 20,
         "learning_updates_per_learning_session": 10,
         "automatically_tune_entropy_hyperparameter": True,

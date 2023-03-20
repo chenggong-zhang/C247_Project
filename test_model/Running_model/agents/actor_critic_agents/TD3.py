@@ -6,9 +6,9 @@ from .DDPG import DDPG
 from exploration_strategies.Gaussian_Exploration import Gaussian_Exploration
 
 class TD3(DDPG):
-    """A TD3 Agent from the paper Addressing Function Approximation Error in Actor-Critic Methods (Fujimoto et al. 2018)
+    """A TD3_model Agent from the paper Addressing Function Approximation Error in Actor-Critic Methods (Fujimoto et al. 2018)
     https://arxiv.org/abs/1802.09477"""
-    agent_name = "TD3"
+    agent_name = "TD3_model"
 
     def __init__(self, config):
         DDPG.__init__(self, config)
